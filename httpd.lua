@@ -11,15 +11,21 @@ local function sendError(socket, code)
 	print("HTTP/1.1 " .. code)
 end
 
+local function parseForm(str)
+	local ret = { }
+	for k, v in string.gmatch(str, "(%w+)=([^&]*)") do
+		ret[k] = v
+	end
+	return ret
+end
+
 local function onReceive(socket, request)
-	local method, resource = string.match(request, "^([A-Z]+) ([^ ]+) HTTP/1.1")
+	local method, resource, query = string.match(request, "^([A-Z]+) ([^ ?]+)%??([^ ]*) HTTP/1.1")
 	if method == nil or resource == nil then
 		socket:close()
 		return
 	end
 	print(method .. " " .. resource .. " HTTP/1.1")
-
-	resource = string.match(resource, "([^?]*)")
 
 	local requestListener = M[method][resource]
 	if requestListener == nil then
@@ -27,16 +33,16 @@ local function onReceive(socket, request)
 		return
 	end
 	
-	local args = { }
-	if method == "POST" then
+	local args
+	if method == "GET" then
+		args = parseForm(query)
+	elseif method == "POST" then
 		if not string.find(request, "Content-Type: application/x-www-form-urlencoded", 1, true) then
 			sendError(socket, "501 Not Implemented")
 			return
 		end
-		content = string.match(request, "\r\n\r\n(.*)")
-		for k, v in string.gmatch(content, "(%w+)=([^&]*)") do
-			args[k] = v
-		end
+		query = string.match(request, "\r\n\r\n(.*)")
+		args = parseForm(query)
 	end
 
 	local response = requestListener(args)
